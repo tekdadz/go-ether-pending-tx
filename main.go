@@ -16,10 +16,9 @@ import (
 
 var (
 	ctx = context.Background()
-	// url = "https://mainnet.infura.io/v3/4fce2c82228340669f3ffc9c5a6c7768" //for Infura
-	// url         = "http://127.0.0.1:8545" //for Ganache
-	url = "wss://mainnet.infura.io/ws/v3/4fce2c82228340669f3ffc9c5a6c7768" //for Infura websocket endpoint
-
+	// url 			= "https://mainnet.infura.io/v3/4fce2c82228340669f3ffc9c5a6c7768" //for Infura
+	// url         	= "http://127.0.0.1:8545" //for Ganache
+	url         = "wss://mainnet.infura.io/ws/v3/4fce2c82228340669f3ffc9c5a6c7768" //for Infura websocket endpoint
 	client, err = ethclient.Dial(url)
 )
 
