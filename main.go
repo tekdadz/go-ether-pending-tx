@@ -7,11 +7,13 @@ import (
 	"log"
 	"math/big"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/ethclient/gethclient"
 )
 
 var (
@@ -19,7 +21,8 @@ var (
 	// url 			= "https://mainnet.infura.io/v3/4fce2c82228340669f3ffc9c5a6c7768" //for Infura
 	// url         	= "http://127.0.0.1:8545" //for Ganache
 	url         = "wss://mainnet.infura.io/ws/v3/4fce2c82228340669f3ffc9c5a6c7768" //for Infura websocket endpoint
-	client, err = ethclient.Dial(url)
+	client, err = ethclient.DialContext(ctx, url)
+	geth_client = gethclient.New(client.Client())
 )
 
 func currentBlock() {
@@ -59,7 +62,7 @@ func createWallet() (string, string) {
 	return address, hexutil.Encode(publicKeyBytes)
 }
 
-func transfer_eth(fromPrivateKeyString, toAddressString string) {
+func transferETH(fromPrivateKeyString, toAddressString string) {
 
 	fmt.Println("==================START TRANSFER===================")
 
@@ -120,25 +123,65 @@ func transfer_eth(fromPrivateKeyString, toAddressString string) {
 	fmt.Println("==================END TRANSFER TEST===================")
 	fmt.Println()
 	fmt.Println()
-
 }
 
-func main() {
-	currentBlock()
-
-	//===================START TRANSFER=================
-	// fromPrivateKeyString := "d64be871edc9fb0bd80a8ce0949c804fa37ef92c32f7333d76b7d1a672fecc5f"
-	// toAddressString := "0xE2DcC343CA1FdDB2C8CE2B79E0dD6744A5f582C0"
-	// transfer_eth(fromPrivateKeyString, toAddressString)
-	//===================END TRANSFER=================
-
-	pendingTxs := make(chan []byte)
-	subscription, err := client.Client().EthSubscribe(context.Background(), pendingTxs, "newPendingTransactions")
+func subscribeNewHeads() {
+	headers := make(chan *types.Header)
+	sub, err := client.SubscribeNewHead(context.Background(), headers)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer subscription.Unsubscribe()
+	for {
+		select {
+		case err := <-sub.Err():
+			log.Fatal(err)
+		case header := <-headers:
+			block, err := client.BlockByHash(context.Background(), header.Hash())
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Println(block.Hash().Hex())
+			fmt.Println(block.Number().Uint64())
+			fmt.Println(block.Time())
+			fmt.Println(block.Nonce())
+			fmt.Println(len(block.Transactions()))
+		}
+	}
+}
 
+func subscribeEventLogs() {
+	logs := make(chan types.Log)
+	query := ethereum.FilterQuery{}
+	sub, err := client.SubscribeFilterLogs(ctx, query, logs)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer sub.Unsubscribe()
+	for {
+		select {
+		case err := <-sub.Err():
+			log.Fatal(err)
+		case vLog := <-logs:
+			block, err := client.BlockByHash(context.Background(), vLog.BlockHash)
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Println(block.TxHash())
+			fmt.Println(block.Hash().Hex())
+			fmt.Println(block.Number().Uint64())
+			fmt.Println(block.Time())
+			fmt.Println(block.Nonce())
+			fmt.Println(len(block.Transactions()))
+		}
+	}
+}
+
+func subscribePendingTransactions() {
+	pendingTxs := make(chan common.Hash)
+	subscription, err := geth_client.SubscribePendingTransactions(ctx, pendingTxs)
+	if err != nil {
+		log.Fatal(err)
+	}
 	for {
 		select {
 		case err := <-subscription.Err():
@@ -147,61 +190,8 @@ func main() {
 			fmt.Println("New Pending Transaction:", tx)
 		}
 	}
+}
 
-	//===================SUBSCRIBE EVENT LOG=================
-	// logs := make(chan types.Log)
-	// query := ethereum.FilterQuery{}
-	// sub, err := client.SubscribeFilterLogs(ctx, query, logs)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// defer sub.Unsubscribe()
-	// for {
-	// 	select {
-	// 	case err := <-sub.Err():
-	// 		log.Fatal(err)
-	// 	case vLog := <-logs:
-	// 		block, err := client.BlockByHash(context.Background(), vLog.BlockHash)
-	// 		if err != nil {
-	// 			log.Fatal(err)
-	// 		}
-	// 		fmt.Println(block.TxHash())
-	// 		fmt.Println(block.Hash().Hex())
-	// 		fmt.Println(block.Number().Uint64())
-	// 		fmt.Println(block.Time())
-	// 		fmt.Println(block.Nonce())
-	// 		fmt.Println(len(block.Transactions()))
-	// 		pendingTransactionCount, err := client.PendingTransactionCount(context.Background())
-	// 		if err != nil {
-	// 			log.Fatal(err)
-	// 		}
-	// 		fmt.Println("pendingTransactionCount:", pendingTransactionCount)
-	// 	}
-	// }
-	//===================END SUBSCRIBE EVENT LOG=================
-
-	//===============START SUBSCRIBE NEW HEAD====================
-	// headers := make(chan *types.Header)
-	// sub, err := client.SubscribeNewHead(context.Background(), headers)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// for {
-	// 	select {
-	// 	case err := <-sub.Err():
-	// 		log.Fatal(err)
-	// 	case header := <-headers:
-	// 		block, err := client.BlockByHash(context.Background(), header.Hash())
-	// 		if err != nil {
-	// 			log.Fatal(err)
-	// 		}
-	// 		fmt.Println(block.Hash().Hex())
-	// 		fmt.Println(block.Number().Uint64())
-	// 		fmt.Println(block.Time())
-	// 		fmt.Println(block.Nonce())
-	// 		fmt.Println(len(block.Transactions()))
-	// 	}
-	// }
-	//===============END SUBSCRIBE NEW HEAD====================
-
+func main() {
+	subscribePendingTransactions()
 }
